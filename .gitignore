@@ -1,0 +1,4 @@
+node_modules/
+.signing/
+*.log
+.DS_Store

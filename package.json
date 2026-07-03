@@ -1,0 +1,36 @@
+{
+	"name": "saagar-mcp-kit",
+	"version": "0.1.0",
+	"description": "Shared toolbelt for baked-corpus MCP servers: Ed25519 manifest signing, HTTP/stdio protocol probes, server.json version parity, Worker CORS helpers, and a wrangler smoke harness.",
+	"type": "module",
+	"license": "MIT",
+	"author": "Saagar Patel",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/saagpatel/mcp-kit"
+	},
+	"engines": {
+		"node": ">=18"
+	},
+	"files": [
+		"bin",
+		"lib",
+		"README.md",
+		"LICENSE"
+	],
+	"exports": {
+		"./signing": "./lib/signing.mjs",
+		"./http-probe": "./lib/http-probe.mjs",
+		"./stdio-probe": "./lib/stdio-probe.mjs",
+		"./worker-shell": "./lib/worker-shell.mjs",
+		"./parity": "./lib/parity.mjs"
+	},
+	"bin": {
+		"mcp-kit-sign": "bin/mcp-kit-sign.mjs",
+		"mcp-kit-parity": "bin/mcp-kit-parity.mjs",
+		"mcp-kit-smoke": "bin/mcp-kit-smoke"
+	},
+	"scripts": {
+		"test": "node --test 'test/*.test.mjs'"
+	}
+}
