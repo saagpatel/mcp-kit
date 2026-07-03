@@ -31,6 +31,6 @@
 		"mcp-kit-smoke": "bin/mcp-kit-smoke"
 	},
 	"scripts": {
-		"test": "node --test 'test/*.test.mjs'"
+		"test": "node --test test/*.test.mjs"
 	}
 }
