@@ -7,7 +7,7 @@
 	"author": "Saagar Patel",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/saagpatel/mcp-kit"
+		"url": "git+https://github.com/saagpatel/mcp-kit.git"
 	},
 	"engines": {
 		"node": ">=18"
