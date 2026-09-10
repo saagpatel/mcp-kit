@@ -1,0 +1,5 @@
+{
+  "name": "mcp-kit",
+  "disableAllMcpServers": true,
+  "install": "set -eu; npx --yes --package=node@24.19.0 --call 'node --version && npm test'"
+}
