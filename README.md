@@ -50,9 +50,12 @@ import { probeHttpServer, rpc, parseToolPayload } from "saagar-mcp-kit/http-prob
 const summary = await probeHttpServer(endpoint, {
 	serverName: "saagarpatel-portfolio",
 	tools: ["get_document", "get_profile", "list_corpus", "search" /* ... */],
+	timeoutMs: 5000, // optional; default 5000. Bounds each initialize / tools/list request.
 });
 // domain calls:
-const search = await rpc(endpoint, 3, "tools/call", { name: "search", arguments: { query } });
+const search = await rpc(endpoint, 3, "tools/call", { name: "search", arguments: { query } }, {
+	timeoutMs: 5000, // optional; default 5000. Aborts a hung Worker instead of waiting forever.
+});
 const payload = parseToolPayload(search.json.result, "search");
 ```
 
