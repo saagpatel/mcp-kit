@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { generateKeypair, signManifest, verifyManifest } from "../lib/signing.mjs";
 
 function setup() {
@@ -48,7 +49,7 @@ test("CLI verify exits 1 on a tampered manifest", () => {
 	const res = spawnSync(
 		process.execPath,
 		[
-			new URL("../bin/mcp-kit-sign.mjs", import.meta.url).pathname,
+			fileURLToPath(new URL("../bin/mcp-kit-sign.mjs", import.meta.url)),
 			"verify",
 			`--manifest=${p.manifestPath}`,
 			`--pub=${p.pubPath}`,

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { probeStdioServer } from "../lib/stdio-probe.mjs";
 
-const FIXTURE = new URL("./fixtures/fake-stdio-server.mjs", import.meta.url).pathname;
+const FIXTURE = fileURLToPath(new URL("./fixtures/fake-stdio-server.mjs", import.meta.url));
 
 test("probeStdioServer runs initialize + tools/list + calls", async () => {
 	const { serverInfo, tools, callResults } = await probeStdioServer(
