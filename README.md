@@ -5,7 +5,7 @@ scaffolding that every server previously carried as hand-forked scripts:
 Ed25519 manifest signing, HTTP and stdio protocol probes, server.json version
 parity, Worker CORS helpers, and a wrangler smoke harness.
 
-Zero runtime dependencies. Node >= 18. Install as a **devDependency** — nothing
+Zero runtime dependencies. Node >= 22. Install as a **devDependency** — nothing
 here ships in a server's runtime bundle.
 
 ```sh
