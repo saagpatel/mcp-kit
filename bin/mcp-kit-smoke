@@ -55,7 +55,8 @@ const child=spawn(process.argv[1],["dev","--port",process.argv[2],"--ip","127.0.
 let stopping=false,spawnFailure=false;
 child.on("error",e=>{console.error(e.message);spawnFailure=true});
 child.on("close",(code,signal)=>{if(!stopping)process.exit(spawnFailure?127:(code??(signal?1:0)))});
-const stop=()=>{if(stopping)return;stopping=true;try{process.kill(-child.pid,"SIGTERM")}catch{};const timer=setTimeout(()=>{try{process.kill(-child.pid,"SIGKILL")}catch{}},500);timer.unref();child.once("close",()=>{clearTimeout(timer);process.exit(0)})};
+const signal=signum=>{try{process.kill(-child.pid,signum)}catch{};try{child.kill(signum)}catch{}};
+const stop=()=>{if(stopping)return;stopping=true;signal("SIGTERM");const timer=setTimeout(()=>signal("SIGKILL"),500);timer.unref();child.once("close",()=>{clearTimeout(timer);process.exit(0)})};
 process.on("SIGTERM",stop);process.on("SIGINT",stop);
 ' "$wrangler" "$PORT" >"$LOG" 2>&1 &
 MANAGER_PID=$!
@@ -85,7 +86,8 @@ const child=spawn(process.argv[1],process.argv.slice(2),{detached:true,stdio:"in
 let stopping=false,spawnFailure=false;
 child.on("error",e=>{console.error(e.message);spawnFailure=true});
 child.on("close",(code,signal)=>{if(!stopping)process.exit(spawnFailure?127:(code??(signal?1:0)))});
-const stop=()=>{if(stopping)return;stopping=true;try{process.kill(-child.pid,"SIGTERM")}catch{};const timer=setTimeout(()=>{try{process.kill(-child.pid,"SIGKILL")}catch{}},500);timer.unref();child.once("close",()=>{clearTimeout(timer);process.exit(0)})};
+const signal=signum=>{try{process.kill(-child.pid,signum)}catch{};try{child.kill(signum)}catch{}};
+const stop=()=>{if(stopping)return;stopping=true;signal("SIGTERM");const timer=setTimeout(()=>signal("SIGKILL"),500);timer.unref();child.once("close",()=>{clearTimeout(timer);process.exit(0)})};
 process.on("SIGTERM",stop);process.on("SIGINT",stop);
 ' "${probe[@]}" &
 PROBE_PID=$!
