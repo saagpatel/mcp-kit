@@ -5,8 +5,9 @@ scaffolding that every server previously carried as hand-forked scripts:
 Ed25519 manifest signing, HTTP and stdio protocol probes, server.json version
 parity, Worker CORS helpers, and a wrangler smoke harness.
 
-Zero runtime dependencies. Node >= 22. Install as a **devDependency** — nothing
-here ships in a server's runtime bundle.
+Zero runtime dependencies. Node >= 22. Install as a **devDependency**. Signing,
+probes, parity, and smoke are development tools; the Worker helpers are imported
+at runtime by Workers and belong in that runtime bundle.
 
 ```sh
 npm install --save-dev saagar-mcp-kit
@@ -41,7 +42,10 @@ The manifest is signed as raw bytes (no canonicalization): serve the exact
 bytes that were signed, and re-sign after any manifest change. The private key
 defaults to `.signing/mcp-ed25519.key` (gitignore `.signing/`; never commit it).
 
-### Probing an HTTP (Worker) server
+### Probing a stateless JSON HTTP (Worker) server
+
+The HTTP probe supports stateless JSON request/response only. Streamable HTTP
+SSE responses, session headers, and initialized notifications are outside its scope.
 
 ```js
 // scripts/probe-mcp.mjs — the repo keeps only its domain expectations
@@ -123,9 +127,15 @@ Three-step wiring (portfolio-mcp shown; operant-mcp is identical in shape):
    repo's expected-tools list, server name, and domain calls; delete
    `scripts/sign-manifest.mjs` and `scripts/smoke-mcp.sh`.
 
-Python franchise repos (MCPAudit, mcp-trust, shadow-mcp, mcpforge) can adopt
-`mcp-kit-parity` in CI without any npm dependency in the package itself:
-`npx saagar-mcp-kit`'s bin or a pinned dev tool step.
+Python franchise repos can invoke the bin without adding an npm dependency to
+their project:
+
+```sh
+npm exec --package=saagar-mcp-kit -- mcp-kit-parity --server-json=server.json --package=pyproject.toml
+```
+
+The TOML reader supports the `[project]` section and a double-quoted literal
+`version = "x.y.z"` only; it does not evaluate TOML or dynamic versions.
 
 ## Roadmap (deliberately not in v0.1)
 
@@ -137,7 +147,32 @@ Python franchise repos (MCPAudit, mcp-trust, shadow-mcp, mcpforge) can adopt
 ## Testing
 
 ```sh
-npm test   # node --test, no dependencies
+make check
 ```
+
+There is no build, lint, format, or type-check step. Use `make setup` to install
+from the lockfile. The smoke harness expects Node.js, curl, and the consumer
+repository's local `./node_modules/.bin/wrangler`; `PORT` can select a port and
+`SMOKE_TIMEOUT_SECS` sets the total deadline (default 120).
+
+Node 18 support was removed; Node 22 is the minimum supported major version.
+
+## Status
+
+### Stack
+
+Dependency-free Node.js ESM package. Node.js 22 and newer are supported; the
+repository toolchain is pinned to Node.js 26.11.1 and npm 12.2.0.
+
+### Known risks
+
+The HTTP probe is intentionally stateless JSON and does not implement the full
+Streamable HTTP session/SSE lifecycle. The smoke harness needs the consumer's
+local Wrangler installation and has not been exercised against Cloudflare here.
+
+### Next steps
+
+Run `make check` locally and rely on the Node.js matrix and macOS CI jobs for
+cross-platform coverage. Full Streamable HTTP support remains a separate design decision.
 
 MIT.
