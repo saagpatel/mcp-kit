@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { checkParity } from "../lib/parity.mjs";
 
-function fixtures(serverVersion, pkgVersion, pkgEntryVersion = serverVersion) {
+function fixtures(t, serverVersion, pkgVersion, pkgEntryVersion = serverVersion) {
 	const dir = mkdtempSync(join(tmpdir(), "mcp-kit-parity-"));
+	t.after(() => rmSync(dir, { recursive: true, force: true }));
 	const serverJsonPath = join(dir, "server.json");
 	writeFileSync(
 		serverJsonPath,
@@ -26,29 +27,29 @@ function fixtures(serverVersion, pkgVersion, pkgEntryVersion = serverVersion) {
 	return { serverJsonPath, packageJsonPath, pyprojectPath };
 }
 
-test("parity OK when all versions match (npm)", () => {
-	const f = fixtures("1.2.3", "1.2.3");
+test("parity OK when all versions match (npm)", (t) => {
+	const f = fixtures(t, "1.2.3", "1.2.3");
 	const res = checkParity({ serverJsonPath: f.serverJsonPath, packagePath: f.packageJsonPath });
 	assert.equal(res.ok, true);
 	assert.equal(res.version, "1.2.3");
 });
 
-test("parity OK against pyproject.toml, ignoring non-project version lines", () => {
-	const f = fixtures("1.2.3", "1.2.3");
+test("parity OK against pyproject.toml, ignoring non-project version lines", (t) => {
+	const f = fixtures(t, "1.2.3", "1.2.3");
 	const res = checkParity({ serverJsonPath: f.serverJsonPath, packagePath: f.pyprojectPath });
 	assert.equal(res.ok, true);
 });
 
-test("top-level server.json version drift is reported", () => {
-	const f = fixtures("1.2.3", "1.3.0", "1.3.0");
+test("top-level server.json version drift is reported", (t) => {
+	const f = fixtures(t, "1.2.3", "1.3.0", "1.3.0");
 	const res = checkParity({ serverJsonPath: f.serverJsonPath, packagePath: f.packageJsonPath });
 	assert.equal(res.ok, false);
 	assert.equal(res.problems.length, 1);
 	assert.match(res.problems[0], /server\.json version "1\.2\.3"/);
 });
 
-test("packages[] entry drift is reported with its identifier", () => {
-	const f = fixtures("1.3.0", "1.3.0", "1.2.3");
+test("packages[] entry drift is reported with its identifier", (t) => {
+	const f = fixtures(t, "1.3.0", "1.3.0", "1.2.3");
 	const res = checkParity({ serverJsonPath: f.serverJsonPath, packagePath: f.packageJsonPath });
 	assert.equal(res.ok, false);
 	assert.match(res.problems[0], /packages\[0\] \(thing\)/);

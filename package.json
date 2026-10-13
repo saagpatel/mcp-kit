@@ -12,6 +12,7 @@
 	"engines": {
 		"node": ">=22"
 	},
+	"packageManager": "npm@12.2.0",
 	"files": [
 		"bin",
 		"lib",
