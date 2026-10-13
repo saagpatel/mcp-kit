@@ -23,6 +23,8 @@ jobs:
 
   macos:
     runs-on: macos-latest
+    # Non-blocking until the hosted-runner smoke teardown issue is fixed: https://github.com/saagpatel/mcp-kit/issues/8
+    continue-on-error: true
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
