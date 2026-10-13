@@ -181,6 +181,51 @@ test("rpc rejects JSON-RPC errors", async () => {
 	);
 });
 
+test("rpc rejects mismatched response ids", async () => {
+	await withServer(jsonServer((res) => {
+		res.setHeader("content-type", "application/json");
+		res.end(JSON.stringify({ jsonrpc: "2.0", id: 99, result: {} }));
+	}), async (endpoint) => {
+		await assert.rejects(rpc(endpoint, 1, "initialize"), /initialize response id mismatch/);
+	});
+});
+
+test("tools/list requires an array", async () => {
+	await withServer(jsonServer((res) => {
+		res.setHeader("content-type", "application/json");
+		res.end(JSON.stringify({ jsonrpc: "2.0", id: 2, result: {} }));
+	}), async (endpoint) => {
+		await assert.rejects(rpc(endpoint, 2, "tools/list"), /result.tools must be an array/);
+	});
+});
+
+test("initialize requires serverInfo", async () => {
+	await withServer(jsonServer((res) => {
+		res.setHeader("content-type", "application/json");
+		res.end(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { protocolVersion: "2025-06-18" } }));
+	}), async (endpoint) => {
+		await assert.rejects(rpc(endpoint, 1, "initialize"), /result.serverInfo is required/);
+	});
+});
+
+test("tools/call rejects isError results", async () => {
+	await withServer(jsonServer((res) => {
+		res.setHeader("content-type", "application/json");
+		res.end(JSON.stringify({ jsonrpc: "2.0", id: 3, result: { isError: true } }));
+	}), async (endpoint) => {
+		await assert.rejects(rpc(endpoint, 3, "tools/call"), /tools\/call returned isError:true/);
+	});
+});
+
+test("rpc clearly rejects SSE responses", async () => {
+	await withServer(jsonServer((res) => {
+		res.setHeader("content-type", "text/event-stream");
+		res.end("event: message\\ndata: {}\\n\\n");
+	}), async (endpoint) => {
+		await assert.rejects(rpc(endpoint, 1, "initialize"), /unsupported: stateless JSON probe/);
+	});
+});
+
 test("rpc rejects a hung local endpoint within the timeout bound", async () => {
 	await withServer(hangingServer(), async (endpoint) => {
 		const timeoutMs = 50;
