@@ -32,7 +32,19 @@ function run(dir, args, env = {}) {
 }
 const port = (offset) => String(41000 + (process.pid + offset) % 20000);
 const servingWrangler = () => `node -e 'const fs=require("node:fs"),http=require("node:http");if(process.env.PIDFILE)fs.writeFileSync(process.env.PIDFILE,String(process.pid));const s=http.createServer((q,r)=>r.end("ok"));s.listen(Number(process.argv[1]),"127.0.0.1")' -- "$3"`;
-function assertDead(pid) { assert.throws(() => process.kill(Number(pid), 0), { code: "ESRCH" }); }
+async function assertDead(pid) {
+	const deadline = Date.now() + 1000;
+	while (Date.now() < deadline) {
+		try {
+			process.kill(Number(pid), 0);
+		} catch (error) {
+			assert.equal(error.code, "ESRCH");
+			return;
+		}
+		await delay(10);
+	}
+	assert.throws(() => process.kill(Number(pid), 0), { code: "ESRCH" });
+}
 
 test("smoke reports missing local wrangler with an install hint", async (t) => {
 	const dir = consumer(t);
@@ -48,7 +60,7 @@ test("smoke bounds hung readiness and removes its log", async (t) => {
 	const result = await run(dir, ["--", "true"], { PORT: port(1), PIDFILE: pidFile });
 	assert.equal(result.code, 124);
 	assert.match(result.stderr, /timed out/);
-	assertDead(readFileSync(pidFile, "utf8"));
+	await assertDead(readFileSync(pidFile, "utf8"));
 	assert.deepEqual(readdirSync(dir).filter((name) => name.startsWith("mcp-kit-smoke.")), []);
 });
 
@@ -65,7 +77,7 @@ test("smoke returns probe failure and tears down local wrangler", async (t) => {
 	const pidFile = join(dir, "wrangler.pid");
 	const result = await run(dir, ["--", "bash", "-c", "exit 7"], { PORT: port(3), PIDFILE: pidFile });
 	assert.equal(result.code, 7);
-	assertDead(readFileSync(pidFile, "utf8"));
+	await assertDead(readFileSync(pidFile, "utf8"));
 	assert.deepEqual(readdirSync(dir).filter((name) => name.startsWith("mcp-kit-smoke.")), []);
 });
 
@@ -79,8 +91,8 @@ test("smoke handles SIGINT and leaves no supervisor or log", async (t) => {
 	child.kill("SIGINT");
 	const outcome = await new Promise((resolve) => child.on("close", (code) => resolve(code)));
 	assert.equal(outcome, 130);
-	assertDead(readFileSync(wranglerPidFile, "utf8"));
-	assertDead(readFileSync(probePidFile, "utf8"));
+	await assertDead(readFileSync(wranglerPidFile, "utf8"));
+	await assertDead(readFileSync(probePidFile, "utf8"));
 	await delay(100);
 	assert.deepEqual(readdirSync(dir).filter((name) => name.startsWith("mcp-kit-smoke.")), []);
 });
