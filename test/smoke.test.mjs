@@ -32,18 +32,22 @@ function run(dir, args, env = {}) {
 }
 const port = (offset) => String(41000 + (process.pid + offset) % 20000);
 const servingWrangler = () => `node -e 'const fs=require("node:fs"),http=require("node:http");if(process.env.PIDFILE)fs.writeFileSync(process.env.PIDFILE,String(process.pid));const s=http.createServer((q,r)=>r.end("ok"));s.listen(Number(process.argv[1]),"127.0.0.1")' -- "$3"`;
-async function assertDead(pid) {
+// $$ rather than $BASHPID: macOS ships bash 3.2, where $BASHPID is empty and
+// Number("") would make kill(0, 0) probe our own process group.
+async function assertDead(pidText) {
+	const pid = Number(pidText);
+	assert.ok(Number.isInteger(pid) && pid > 0, `invalid pid ${JSON.stringify(pidText)}`);
 	const deadline = Date.now() + 1000;
 	while (Date.now() < deadline) {
 		try {
-			process.kill(Number(pid), 0);
+			process.kill(pid, 0);
 		} catch (error) {
 			assert.equal(error.code, "ESRCH");
 			return;
 		}
 		await delay(10);
 	}
-	assert.throws(() => process.kill(Number(pid), 0), { code: "ESRCH" });
+	assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
 }
 
 test("smoke reports missing local wrangler with an install hint", async (t) => {
@@ -55,7 +59,7 @@ test("smoke reports missing local wrangler with an install hint", async (t) => {
 });
 
 test("smoke bounds hung readiness and removes its log", async (t) => {
-	const dir = consumer(t, 'echo "$BASHPID" > "$PIDFILE"; sleep 20');
+	const dir = consumer(t, 'echo "$$" > "$PIDFILE"; sleep 20');
 	const pidFile = join(dir, "pid");
 	const result = await run(dir, ["--", "true"], { PORT: port(1), PIDFILE: pidFile });
 	assert.equal(result.code, 124);
@@ -85,7 +89,7 @@ test("smoke handles SIGINT and leaves no supervisor or log", async (t) => {
 	const dir = consumer(t, servingWrangler());
 	const wranglerPidFile = join(dir, "wrangler.pid");
 	const probePidFile = join(dir, "probe.pid");
-	const child = spawn("bash", [SMOKE, "--", "bash", "-c", 'echo "$BASHPID" > "$PROBE_PIDFILE"; sleep 20'], { cwd: dir, env: { ...process.env, TMPDIR: dir, PORT: port(4), PIDFILE: wranglerPidFile, PROBE_PIDFILE: probePidFile, SMOKE_TIMEOUT_SECS: "10" }, stdio: "ignore" });
+	const child = spawn("bash", [SMOKE, "--", "bash", "-c", 'echo "$$" > "$PROBE_PIDFILE"; sleep 20'], { cwd: dir, env: { ...process.env, TMPDIR: dir, PORT: port(4), PIDFILE: wranglerPidFile, PROBE_PIDFILE: probePidFile, SMOKE_TIMEOUT_SECS: "10" }, stdio: "ignore" });
 	for (let i = 0; i < 40 && !existsSync(probePidFile); i += 1) await delay(50);
 	await delay(300);
 	child.kill("SIGINT");

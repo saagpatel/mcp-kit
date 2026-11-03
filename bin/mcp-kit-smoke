@@ -60,10 +60,12 @@ const stop=()=>{if(stopping)return;stopping=true;signal("SIGTERM");const timer=s
 process.on("SIGTERM",stop);process.on("SIGINT",stop);
 ' "$wrangler" "$PORT" >"$LOG" 2>&1 &
 MANAGER_PID=$!
+# SECONDS counts whole seconds from a fractional start, so it can read one
+# second high; compare with > so the deadline is never reached early.
 SECONDS=0
 ready=0
 code=000
-while (( SECONDS < deadline )); do
+while (( SECONDS <= deadline )); do
 	code="$(curl --connect-timeout 1 --max-time 2 -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/mcp" 2>/dev/null || true)"
 	[[ -n "$code" ]] || code=000
 	if [[ "$code" != 000 ]]; then ready=1; break; fi
@@ -72,7 +74,7 @@ while (( SECONDS < deadline )); do
 done
 echo "ready=$ready after ${SECONDS}s (/mcp returned HTTP ${code} on port ${PORT})"
 if [[ "$ready" != 1 ]]; then
-	if (( SECONDS >= deadline )); then echo "smoke timed out after ${deadline}s" >&2; exit 124; fi
+	if (( SECONDS > deadline )); then echo "smoke timed out after ${deadline}s" >&2; exit 124; fi
 	exit 1
 fi
 
@@ -92,7 +94,7 @@ process.on("SIGTERM",stop);process.on("SIGINT",stop);
 ' "${probe[@]}" &
 PROBE_PID=$!
 while kill -0 "$PROBE_PID" 2>/dev/null; do
-	if (( SECONDS >= deadline )); then echo "smoke timed out after ${deadline}s" >&2; exit 124; fi
+	if (( SECONDS > deadline )); then echo "smoke timed out after ${deadline}s" >&2; exit 124; fi
 	sleep 0.1
 done
 set +e
