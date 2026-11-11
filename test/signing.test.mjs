@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -77,6 +77,23 @@ test("verification refuses to treat the colocated public key as its own trust an
 	assert.throws(
 		() => verifyManifest({ manifestPath: p.manifestPath, sigPath: p.sigPath, pubPath: p.pubPath, trustedPubPath: p.pubPath }),
 		/ must not alias /,
+	);
+});
+
+test("verification refuses a hard-linked bundle key as an independent publisher pin", (t) => {
+	const p = setup(t);
+	generateKeypair({ keyPath: p.keyPath, pubPath: p.pubPath });
+	const trustedPubPath = join(p.dir, "trusted-publisher.pub");
+	linkSync(p.pubPath, trustedPubPath);
+	const attackerKeyPath = join(p.dir, "attacker.key");
+	const attackerPubPath = join(p.dir, "attacker.pub");
+	generateKeypair({ keyPath: attackerKeyPath, pubPath: attackerPubPath });
+	writeFileSync(p.manifestPath, JSON.stringify({ name: "attacker", version: "9.9.9" }));
+	signManifest({ manifestPath: p.manifestPath, keyPath: attackerKeyPath, sigPath: p.sigPath, pubPath: attackerPubPath });
+	writeFileSync(p.pubPath, readFileSync(attackerPubPath));
+	assert.throws(
+		() => verifyManifest({ manifestPath: p.manifestPath, sigPath: p.sigPath, pubPath: p.pubPath, trustedPubPath }),
+		/must not alias/,
 	);
 });
 
