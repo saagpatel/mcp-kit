@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -24,16 +24,44 @@ function setup(t) {
 test("gen-key -> sign -> verify roundtrip", (t) => {
 	const p = setup(t);
 	generateKeypair({ keyPath: p.keyPath, pubPath: p.pubPath });
+	const trustedPubPath = join(p.dir, "trusted-publisher.pub");
+	writeFileSync(trustedPubPath, readFileSync(p.pubPath));
 	signManifest({ manifestPath: p.manifestPath, keyPath: p.keyPath, sigPath: p.sigPath, pubPath: p.pubPath });
-	assert.equal(verifyManifest({ manifestPath: p.manifestPath, sigPath: p.sigPath, pubPath: p.pubPath }), true);
+	assert.equal(verifyManifest({ manifestPath: p.manifestPath, sigPath: p.sigPath, pubPath: p.pubPath, trustedPubPath }), true);
 });
 
 test("tampered manifest fails verification", (t) => {
 	const p = setup(t);
 	generateKeypair({ keyPath: p.keyPath, pubPath: p.pubPath });
+	const trustedPubPath = join(p.dir, "trusted-publisher.pub");
+	writeFileSync(trustedPubPath, readFileSync(p.pubPath));
 	signManifest({ manifestPath: p.manifestPath, keyPath: p.keyPath, sigPath: p.sigPath, pubPath: p.pubPath });
 	writeFileSync(p.manifestPath, JSON.stringify({ name: "test", version: "TAMPERED" }));
-	assert.equal(verifyManifest({ manifestPath: p.manifestPath, sigPath: p.sigPath, pubPath: p.pubPath }), false);
+	assert.equal(verifyManifest({ manifestPath: p.manifestPath, sigPath: p.sigPath, pubPath: p.pubPath, trustedPubPath }), false);
+});
+
+test("verification requires an independently supplied publisher pin", (t) => {
+	const p = setup(t);
+	generateKeypair({ keyPath: p.keyPath, pubPath: p.pubPath });
+	signManifest({ manifestPath: p.manifestPath, keyPath: p.keyPath, sigPath: p.sigPath, pubPath: p.pubPath });
+	assert.throws(
+		() => verifyManifest({ manifestPath: p.manifestPath, sigPath: p.sigPath, pubPath: p.pubPath }),
+		/trustedPubPath is required/,
+	);
+});
+
+test("a replacement manifest and colocated key cannot impersonate the pinned publisher", (t) => {
+	const p = setup(t);
+	generateKeypair({ keyPath: p.keyPath, pubPath: p.pubPath });
+	const trustedPubPath = join(p.dir, "trusted-publisher.pub");
+	writeFileSync(trustedPubPath, readFileSync(p.pubPath));
+	const attackerKeyPath = join(p.dir, "attacker.key");
+	const attackerPubPath = join(p.dir, "attacker.pub");
+	generateKeypair({ keyPath: attackerKeyPath, pubPath: attackerPubPath });
+	writeFileSync(p.manifestPath, JSON.stringify({ name: "attacker", version: "9.9.9" }));
+	signManifest({ manifestPath: p.manifestPath, keyPath: attackerKeyPath, sigPath: p.sigPath, pubPath: attackerPubPath });
+	writeFileSync(p.pubPath, readFileSync(attackerPubPath));
+	assert.equal(verifyManifest({ manifestPath: p.manifestPath, sigPath: p.sigPath, pubPath: p.pubPath, trustedPubPath }), false);
 });
 
 test("gen-key refuses to overwrite an existing private key", (t) => {
@@ -42,11 +70,40 @@ test("gen-key refuses to overwrite an existing private key", (t) => {
 	assert.throws(() => generateKeypair({ keyPath: p.keyPath, pubPath: p.pubPath }), /refusing to overwrite/);
 });
 
+test("verification refuses to treat the colocated public key as its own trust anchor", (t) => {
+	const p = setup(t);
+	generateKeypair({ keyPath: p.keyPath, pubPath: p.pubPath });
+	signManifest({ manifestPath: p.manifestPath, keyPath: p.keyPath, sigPath: p.sigPath, pubPath: p.pubPath });
+	assert.throws(
+		() => verifyManifest({ manifestPath: p.manifestPath, sigPath: p.sigPath, pubPath: p.pubPath, trustedPubPath: p.pubPath }),
+		/ must not alias /,
+	);
+});
+
+test("verification refuses a hard-linked bundle key as an independent publisher pin", (t) => {
+	const p = setup(t);
+	generateKeypair({ keyPath: p.keyPath, pubPath: p.pubPath });
+	const trustedPubPath = join(p.dir, "trusted-publisher.pub");
+	linkSync(p.pubPath, trustedPubPath);
+	const attackerKeyPath = join(p.dir, "attacker.key");
+	const attackerPubPath = join(p.dir, "attacker.pub");
+	generateKeypair({ keyPath: attackerKeyPath, pubPath: attackerPubPath });
+	writeFileSync(p.manifestPath, JSON.stringify({ name: "attacker", version: "9.9.9" }));
+	signManifest({ manifestPath: p.manifestPath, keyPath: attackerKeyPath, sigPath: p.sigPath, pubPath: attackerPubPath });
+	writeFileSync(p.pubPath, readFileSync(attackerPubPath));
+	assert.throws(
+		() => verifyManifest({ manifestPath: p.manifestPath, sigPath: p.sigPath, pubPath: p.pubPath, trustedPubPath }),
+		/must not alias/,
+	);
+});
+
 test("CLI verify exits 1 on a tampered manifest", (t) => {
 	const p = setup(t);
 	generateKeypair({ keyPath: p.keyPath, pubPath: p.pubPath });
 	signManifest({ manifestPath: p.manifestPath, keyPath: p.keyPath, sigPath: p.sigPath, pubPath: p.pubPath });
 	writeFileSync(p.manifestPath, "{}");
+	const trustedPubPath = join(p.dir, "trusted-publisher.pub");
+	writeFileSync(trustedPubPath, readFileSync(p.pubPath));
 	const res = spawnSync(
 		process.execPath,
 		[
@@ -55,11 +112,43 @@ test("CLI verify exits 1 on a tampered manifest", (t) => {
 			`--manifest=${p.manifestPath}`,
 			`--pub=${p.pubPath}`,
 			`--sig=${p.sigPath}`,
+			`--trusted-pub=${trustedPubPath}`,
 		],
 		{ encoding: "utf8" },
 	);
 	assert.equal(res.status, 1);
 	assert.match(res.stdout, /INVALID/);
+});
+
+test("CLI verify refuses a colocated key without an independent trust anchor", (t) => {
+	const p = setup(t);
+	generateKeypair({ keyPath: p.keyPath, pubPath: p.pubPath });
+	signManifest({ manifestPath: p.manifestPath, keyPath: p.keyPath, sigPath: p.sigPath, pubPath: p.pubPath });
+	const res = spawnSync(process.execPath, [
+		fileURLToPath(new URL("../bin/mcp-kit-sign.mjs", import.meta.url)), "verify",
+		`--manifest=${p.manifestPath}`, `--pub=${p.pubPath}`, `--sig=${p.sigPath}`,
+	], { encoding: "utf8" });
+	assert.equal(res.status, 2);
+	assert.match(res.stderr, /requires --trusted-pub/);
+});
+
+test("CLI verify-pinned returns a policy-bound success document", (t) => {
+	const p = setup(t);
+	generateKeypair({ keyPath: p.keyPath, pubPath: p.pubPath });
+	const trustedPubPath = join(p.dir, "trusted-publisher.pub");
+	writeFileSync(trustedPubPath, readFileSync(p.pubPath));
+	signManifest({ manifestPath: p.manifestPath, keyPath: p.keyPath, sigPath: p.sigPath, pubPath: p.pubPath });
+	const res = spawnSync(process.execPath, [
+		fileURLToPath(new URL("../bin/mcp-kit-sign.mjs", import.meta.url)), "verify-pinned",
+		`--manifest=${p.manifestPath}`, `--pub=${p.pubPath}`, `--sig=${p.sigPath}`, `--trusted-pub=${trustedPubPath}`,
+	], { encoding: "utf8" });
+	assert.equal(res.status, 0);
+	assert.deepEqual(JSON.parse(res.stdout), {
+		tool: "mcp-kit-sign",
+		command: "verify-pinned",
+		policy: "verify-independent-publisher-pin-v1",
+		status: "verified",
+	});
 });
 
 test("concurrent gen-key has exactly one winner", async (t) => {

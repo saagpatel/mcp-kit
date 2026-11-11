@@ -91,6 +91,19 @@ async function withServer(server, fn) {
 	}
 }
 
+test("JSON-only probe requests advertise both MCP response media types", async () => {
+	const server = createServer((req, res) => {
+		assert.equal(req.headers.accept, "application/json, text/event-stream");
+		res.setHeader("content-type", "application/json");
+		res.end(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { protocolVersion: "2025-06-18", serverInfo: { name: "fixture-server", version: "0.0.1" } } }));
+	});
+	await withServer(server, async (endpoint) => {
+		const response = await rpc(endpoint, 1, "initialize", {});
+		assert.equal(response.contentType, "application/json");
+		assert.equal(response.json.result.serverInfo.name, "fixture-server");
+	});
+});
+
 test("probeHttpServer passes against a conforming server", async () => {
 	await withServer(fixtureServer(), async (endpoint) => {
 		const summary = await probeHttpServer(endpoint, {

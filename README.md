@@ -35,12 +35,24 @@ kit's drivers.
 ```sh
 mcp-kit-sign gen-key --manifest=.well-known/mcp.json   # one-time keypair
 mcp-kit-sign sign    --manifest=.well-known/mcp.json   # detached .sig + pubkey
-mcp-kit-sign verify  --manifest=.well-known/mcp.json   # exit 0 valid / 1 invalid
+mcp-kit-sign verify  --manifest=.well-known/mcp.json --pub=downloaded.pub --trusted-pub=publisher-pin.pub
 ```
 
 The manifest is signed as raw bytes (no canonicalization): serve the exact
 bytes that were signed, and re-sign after any manifest change. The private key
 defaults to `.signing/mcp-ed25519.key` (gitignore `.signing/`; never commit it).
+Verification requires `--trusted-pub` to point to a publisher key obtained and
+pinned independently of the manifest/signature bundle. The colocated `--pub`
+is checked against that pin; by itself it establishes integrity only, not who
+published the bundle. Keep the pin in an independently trusted configuration
+or deliver it through a separately authenticated channel.
+
+This is a breaking verifier change: existing library or CLI callers without an
+independently provisioned pin will fail closed. Update each caller with its
+publisher's separately authenticated pin before using the new verifier.
+Callers that need a machine-readable assurance should use
+`mcp-kit-sign verify-pinned`; it returns a JSON result with the policy and
+verification status from the same verification invocation.
 
 ### Probing a stateless JSON HTTP (Worker) server
 
