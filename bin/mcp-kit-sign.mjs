@@ -3,7 +3,7 @@ import { parseArgs } from "node:util";
 import { resolve } from "node:path";
 import { defaultPaths, generateKeypair, signManifest, verifyManifest } from "../lib/signing.mjs";
 
-const HELP = `Usage: mcp-kit-sign <gen-key|sign|verify> --manifest=PATH [--key=PATH] [--pub=PATH] [--sig=PATH] [--trusted-pub=PATH]\n       mcp-kit-sign --help`;
+const HELP = `Usage: mcp-kit-sign <gen-key|sign|verify|verify-pinned> --manifest=PATH [--key=PATH] [--pub=PATH] [--sig=PATH] [--trusted-pub=PATH]\n       mcp-kit-sign --help`;
 const commands = new Map();
 const usageError = (message) => { console.error(`${message}\n${HELP}`); process.exit(2); };
 let parsed;
@@ -16,7 +16,7 @@ try {
 if (parsed.values.help) { console.log(HELP); process.exit(0); }
 if (parsed.positionals.length !== 1) usageError("exactly one command is required");
 const [cmd] = parsed.positionals;
-if (!new Set(["gen-key", "sign", "verify"]).has(cmd)) usageError(`unknown command "${cmd}"`);
+if (!new Set(["gen-key", "sign", "verify", "verify-pinned"]).has(cmd)) usageError(`unknown command "${cmd}"`);
 if (!parsed.values.manifest) usageError("--manifest=PATH is required");
 const manifestPath = resolve(parsed.values.manifest);
 const derived = defaultPaths(manifestPath);
@@ -37,6 +37,17 @@ commands.set("verify", () => {
 	if (!trustedPubPath) usageError("verify requires --trusted-pub=PATH (obtained independently of the manifest bundle)");
 	const ok = verifyManifest({ manifestPath, sigPath, pubPath, trustedPubPath });
 	console.log(ok ? "signature VALID" : "signature INVALID");
+	if (!ok) process.exitCode = 1;
+});
+commands.set("verify-pinned", () => {
+	if (!trustedPubPath) usageError("verify-pinned requires --trusted-pub=PATH (obtained independently of the manifest bundle)");
+	const ok = verifyManifest({ manifestPath, sigPath, pubPath, trustedPubPath });
+	console.log(JSON.stringify({
+		tool: "mcp-kit-sign",
+		command: "verify-pinned",
+		policy: "verify-independent-publisher-pin-v1",
+		status: ok ? "verified" : "invalid",
+	}));
 	if (!ok) process.exitCode = 1;
 });
 try { commands.get(cmd)(); }

@@ -50,6 +50,9 @@ or deliver it through a separately authenticated channel.
 This is a breaking verifier change: existing library or CLI callers without an
 independently provisioned pin will fail closed. Update each caller with its
 publisher's separately authenticated pin before using the new verifier.
+Callers that need a machine-readable assurance should use
+`mcp-kit-sign verify-pinned`; it returns a JSON result with the policy and
+verification status from the same verification invocation.
 
 ### Probing a stateless JSON HTTP (Worker) server
 

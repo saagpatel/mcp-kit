@@ -132,6 +132,25 @@ test("CLI verify refuses a colocated key without an independent trust anchor", (
 	assert.match(res.stderr, /requires --trusted-pub/);
 });
 
+test("CLI verify-pinned returns a policy-bound success document", (t) => {
+	const p = setup(t);
+	generateKeypair({ keyPath: p.keyPath, pubPath: p.pubPath });
+	const trustedPubPath = join(p.dir, "trusted-publisher.pub");
+	writeFileSync(trustedPubPath, readFileSync(p.pubPath));
+	signManifest({ manifestPath: p.manifestPath, keyPath: p.keyPath, sigPath: p.sigPath, pubPath: p.pubPath });
+	const res = spawnSync(process.execPath, [
+		fileURLToPath(new URL("../bin/mcp-kit-sign.mjs", import.meta.url)), "verify-pinned",
+		`--manifest=${p.manifestPath}`, `--pub=${p.pubPath}`, `--sig=${p.sigPath}`, `--trusted-pub=${trustedPubPath}`,
+	], { encoding: "utf8" });
+	assert.equal(res.status, 0);
+	assert.deepEqual(JSON.parse(res.stdout), {
+		tool: "mcp-kit-sign",
+		command: "verify-pinned",
+		policy: "verify-independent-publisher-pin-v1",
+		status: "verified",
+	});
+});
+
 test("concurrent gen-key has exactly one winner", async (t) => {
 	const p = setup(t);
 	const moduleUrl = new URL("../lib/signing.mjs", import.meta.url).href;
