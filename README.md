@@ -67,11 +67,17 @@ includes the policy and verification status from that invocation.
 
 The HTTP probe supports stateless JSON request/response only. Streamable HTTP
 SSE responses, session headers, and initialized notifications are outside its scope.
-Supply your server's `endpoint` URL and search `query` in the probe script.
+The smoke harness passes the server URL to the probe via `--endpoint`.
+Choose a search query that fits your server's corpus.
 
 ```js
 // scripts/probe-mcp.mjs — the repo keeps only its domain expectations
+import { parseArgs } from "node:util";
 import { probeHttpServer, rpc, parseToolPayload } from "saagar-mcp-kit/http-probe";
+
+const { values: { endpoint } } = parseArgs({ options: { endpoint: { type: "string" } } });
+if (!endpoint) throw new Error("Pass --endpoint with the server URL");
+const query = "portfolio";
 
 const summary = await probeHttpServer(endpoint, {
 	serverName: "saagarpatel-portfolio",
@@ -139,7 +145,15 @@ and tears down.
 
 Three-step wiring (portfolio-mcp shown; operant-mcp is identical in shape):
 
-1. `npm install --save-dev ../mcp-kit`
+1. Run `npm install --save-dev ../mcp-kit` locally and commit the consumer's
+   `package.json` and `package-lock.json`. On a clean CI runner, run these
+   commands from the consumer checkout to provision the same relative path
+   with a kit commit that includes the pinned verifier:
+   ```sh
+   git clone --no-checkout https://github.com/saagpatel/mcp-kit.git ../mcp-kit
+   git -C ../mcp-kit checkout --detach 61051c941f8d7d8cd67194e73e008a20117ddf44
+   npm ci
+   ```
 2. Replace scripts in `package.json`:
    ```json
    "sign": "mcp-kit-sign sign --manifest=../portfolio-index/.well-known/mcp.json",
