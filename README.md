@@ -5,12 +5,14 @@ scaffolding that every server previously carried as hand-forked scripts:
 Ed25519 manifest signing, HTTP and stdio protocol probes, server.json version
 parity, Worker CORS helpers, and a wrangler smoke harness.
 
-Zero runtime dependencies. Node >= 22. Install as a **devDependency**. Signing,
-probes, parity, and smoke are development tools; the Worker helpers are imported
-at runtime by Workers and belong in that runtime bundle.
+Zero runtime dependencies. Node >= 22. To test a fresh clone, see **Testing**.
+To use this checkout in a consumer project, install it as a **devDependency**
+from that project (assuming the clone is at `../mcp-kit`). The npm registry's
+0.1.0 release lacks the pinned verifier used below. Signing, probes, parity,
+and smoke are development tools. Bundle the Worker helpers with your Worker.
 
 ```sh
-npm install --save-dev saagar-mcp-kit
+npm install --save-dev ../mcp-kit
 ```
 
 ## What's inside
@@ -30,19 +32,26 @@ kit's drivers.
 
 ## Usage
 
+Run the CLI examples from the consumer project. Its npm scripts can use the bin
+names directly. In a shell, run `export PATH="$PWD/node_modules/.bin:$PATH"` first.
+
 ### Signing
+
+Start with your manifest at `.well-known/mcp.json`. For verification, provision
+`publisher-pin.pub` through an independently authenticated channel.
 
 ```sh
 mcp-kit-sign gen-key --manifest=.well-known/mcp.json   # one-time keypair
 mcp-kit-sign sign    --manifest=.well-known/mcp.json   # detached .sig + pubkey
-mcp-kit-sign verify  --manifest=.well-known/mcp.json --pub=downloaded.pub --trusted-pub=publisher-pin.pub
+mcp-kit-sign verify  --manifest=.well-known/mcp.json --trusted-pub=publisher-pin.pub
 ```
 
 The manifest is signed as raw bytes (no canonicalization): serve the exact
 bytes that were signed, and re-sign after any manifest change. The private key
 defaults to `.signing/mcp-ed25519.key` (gitignore `.signing/`; never commit it).
 Verification requires `--trusted-pub` to point to a publisher key obtained and
-pinned independently of the manifest/signature bundle. The colocated `--pub`
+pinned independently of the manifest/signature bundle. The bundled public key
+(by default `mcp-ed25519.pub` beside the manifest, overridable with `--pub`)
 is checked against that pin; by itself it establishes integrity only, not who
 published the bundle. Keep the pin in an independently trusted configuration
 or deliver it through a separately authenticated channel.
@@ -51,13 +60,14 @@ This is a breaking verifier change: existing library or CLI callers without an
 independently provisioned pin will fail closed. Update each caller with its
 publisher's separately authenticated pin before using the new verifier.
 Callers that need a machine-readable assurance should use
-`mcp-kit-sign verify-pinned`; it returns a JSON result with the policy and
-verification status from the same verification invocation.
+`mcp-kit-sign verify-pinned` with the same flags as `verify`. Its JSON result
+includes the policy and verification status from that invocation.
 
 ### Probing a stateless JSON HTTP (Worker) server
 
 The HTTP probe supports stateless JSON request/response only. Streamable HTTP
 SSE responses, session headers, and initialized notifications are outside its scope.
+Supply your server's `endpoint` URL and search `query` in the probe script.
 
 ```js
 // scripts/probe-mcp.mjs — the repo keeps only its domain expectations
@@ -70,7 +80,7 @@ const summary = await probeHttpServer(endpoint, {
 });
 // domain calls:
 const search = await rpc(endpoint, 3, "tools/call", { name: "search", arguments: { query } }, {
-	timeoutMs: 5000, // optional; default 5000. Aborts a hung Worker instead of waiting forever.
+	timeoutMs: 5000, // optional; default 5000. Aborts the request if the Worker hangs.
 });
 const payload = parseToolPayload(search.json.result, "search");
 ```
@@ -111,8 +121,8 @@ mcp-kit-parity                                # server.json vs package.json/pypr
 mcp-kit-parity --server-json=server.json --package=pyproject.toml
 ```
 
-The MCP registry is version-keyed: a release whose server.json lags its package
-version silently serves a stale registry entry. Run this in CI for every
+The check compares `server.json`'s top-level version and each `packages[].version`
+with the package manifest version. Run this in CI for every
 franchise repo — npm and PyPI alike.
 
 ### Smoke harness
@@ -121,14 +131,15 @@ franchise repo — npm and PyPI alike.
 mcp-kit-smoke -- node scripts/probe-mcp.mjs --endpoint "http://127.0.0.1:{port}/mcp"
 ```
 
-Boots `wrangler dev` on a free port, waits until `/mcp` answers, substitutes
-`{port}` into the probe command, runs it, and tears down.
+Boots `wrangler dev` on a free port by default. Any HTTP status from `/mcp`
+starts the probe. The harness substitutes `{port}` in its arguments, runs it,
+and tears down.
 
 ## Adopting in a franchise repo
 
 Three-step wiring (portfolio-mcp shown; operant-mcp is identical in shape):
 
-1. `npm install --save-dev saagar-mcp-kit`
+1. `npm install --save-dev ../mcp-kit`
 2. Replace scripts in `package.json`:
    ```json
    "sign": "mcp-kit-sign sign --manifest=../portfolio-index/.well-known/mcp.json",
@@ -139,15 +150,15 @@ Three-step wiring (portfolio-mcp shown; operant-mcp is identical in shape):
    repo's expected-tools list, server name, and domain calls; delete
    `scripts/sign-manifest.mjs` and `scripts/smoke-mcp.sh`.
 
-Python franchise repos can invoke the bin without adding an npm dependency to
-their project:
+For parity alone, Python franchise repos can invoke the bin without adding an
+npm dependency to their project:
 
 ```sh
 npm exec --package=saagar-mcp-kit -- mcp-kit-parity --server-json=server.json --package=pyproject.toml
 ```
 
-The TOML reader supports the `[project]` section and a double-quoted literal
-`version = "x.y.z"` only; it does not evaluate TOML or dynamic versions.
+The TOML reader matches an unindented, double-quoted `version = "..."` line in
+`[project]`. It compares the string literally and does not resolve dynamic versions.
 
 ## Roadmap (deliberately not in v0.1)
 
@@ -158,14 +169,17 @@ The TOML reader supports the `[project]` section and a double-quoted literal
 
 ## Testing
 
+From the kit checkout, run these with the toolchain versions below.
+
 ```sh
+make setup
 make check
 ```
 
-There is no build, lint, format, or type-check step. Use `make setup` to install
-from the lockfile. The smoke harness expects Node.js, curl, and the consumer
-repository's local `./node_modules/.bin/wrangler`; `PORT` can select a port and
-`SMOKE_TIMEOUT_SECS` sets the total deadline (default 120).
+There is no build, lint, format, or type-check step. The smoke harness expects
+Bash, Node.js, curl, and the consumer repository's local `./node_modules/.bin/wrangler`.
+`PORT` can select a port. Readiness and probe execution share the
+`SMOKE_TIMEOUT_SECS` timeout (default 120 seconds).
 
 Node 18 support was removed; Node 22 is the minimum supported major version.
 
